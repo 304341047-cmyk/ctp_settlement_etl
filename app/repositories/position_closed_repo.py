@@ -29,36 +29,35 @@ def insert_many(
         trans_price,
         realized_p_l,
         premium_received_paid,
-        premium_netting,
+        account_id,
         source_file,
         raw_payload
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
-    params = []
-    for r in records:
-        params.append(
-            (
-                r.close_date,
-                r.invest_unit,
-                r.exchange,
-                r.trading_code,
-                r.product,
-                r.instrument,
-                r.open_date,
-                r.s_h,
-                r.b_s,
-                r.lots,
-                r.pos_open_price,
-                r.prev_sttl,
-                r.trans_price,
-                r.realized_p_l,
-                r.premium_received_paid,
-                r.premium_netting,
-                r.source_file,
-                r.raw_payload,
-            )
+    params = [
+        (
+            r.close_date,
+            r.invest_unit,
+            r.exchange,
+            r.trading_code,
+            r.product,
+            r.instrument,
+            r.open_date,
+            r.s_h,
+            r.b_s,
+            r.lots,
+            r.pos_open_price,
+            r.prev_sttl,
+            r.trans_price,
+            r.realized_p_l,
+            r.premium_received_paid,
+            r.account_id,
+            r.source_file,
+            r.raw_payload,
         )
+        for r in records
+    ]
 
     conn.executemany(sql, params)
     return len(records)

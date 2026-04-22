@@ -18,8 +18,9 @@ class TransactionRecord:
     o_c: Optional[str] = None
     fee: Optional[float] = None
     realized_p_l: Optional[float] = None
-    premium_r_p: Optional[float] = None
+    premium_received_paid: Optional[float] = None
     trans_no: Optional[str] = None
+    account_id: Optional[str] = None
 
     source_file: str = ""
     raw_payload: Optional[str] = None

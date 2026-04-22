@@ -12,15 +12,15 @@ class PositionsDetail:
     open_date: Optional[str] = None
     s_h: Optional[str] = None
     b_s: Optional[str] = None
-    positon: Optional[float] = None
-    open_price: Optional[float] = None
+    position_qty: Optional[float] = None
+    pos_open_price: Optional[float] = None
     prev_sttl: Optional[float] = None
-    sttl_today: Optional[float] = None
+    settlement_price: Optional[float] = None
     accum_p_l: Optional[float] = None
     mtm_p_l: Optional[float] = None
     margin: Optional[float] = None
-    market_val: Optional[float] = None
-    market_val_chg: Optional[float] = None
+    market_value: Optional[float] = None
+    account_id: Optional[str] = None
 
     source_file: str = ""
     raw_payload: Optional[str] = None

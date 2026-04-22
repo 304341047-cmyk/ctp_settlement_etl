@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 
 
 @dataclass
-class SectionBlock:
-    key: str
+class Section:
+    name: str
     title: str
     content: str
 
 
 SECTION_PATTERNS = [
     ("account_summary", r"资金状况"),
+    ("deposit_withdrawal", r"出入金明细"),
     ("transaction_record", r"成交记录"),
     ("exercise_statement", r"行权明细"),
     ("position_closed", r"平仓明细"),
@@ -19,39 +22,32 @@ SECTION_PATTERNS = [
 ]
 
 
-def split_sections(text: str) -> dict[str, SectionBlock]:
-    found = []
+def split_sections(full_text: str) -> dict[str, Section]:
+    matches = []
 
-    for key, pattern in SECTION_PATTERNS:
-        match = re.search(pattern, text)
-        if match:
-            found.append(
+    for name, pattern in SECTION_PATTERNS:
+        for m in re.finditer(pattern, full_text):
+            matches.append(
                 {
-                    "key": key,
-                    "title": match.group(0),
-                    "start": match.start(),
+                    "name": name,
+                    "title": m.group(0),
+                    "start": m.start(),
+                    "end": m.end(),
                 }
             )
 
-    found.sort(key=lambda x: x["start"])
+    matches.sort(key=lambda x: x["start"])
 
-    sections: dict[str, SectionBlock] = {}
-
-    for i, item in enumerate(found):
+    sections: dict[str, Section] = {}
+    for i, item in enumerate(matches):
         start = item["start"]
-        end = found[i + 1]["start"] if i + 1 < len(found) else len(text)
-        content = text[start:end]
+        end = matches[i + 1]["start"] if i + 1 < len(matches) else len(full_text)
 
-        sections[item["key"]] = SectionBlock(
-            key=item["key"],
+        content = full_text[start:end].strip()
+        sections[item["name"]] = Section(
+            name=item["name"],
             title=item["title"],
             content=content,
         )
 
     return sections
-
-
-def require_section(sections: dict[str, SectionBlock], key: str) -> SectionBlock:
-    if key not in sections:
-        raise ValueError(f"未找到区块: {key}")
-    return sections[key]

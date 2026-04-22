@@ -2,17 +2,22 @@ import sqlite3
 from typing import Any
 
 from app.repositories.account_summary_repo import insert_many as insert_account_summary
+from app.repositories.deposit_withdrawal_repo import insert_many as insert_deposit_withdrawal
 from app.repositories.transaction_record_repo import insert_many as insert_transaction_records
 from app.repositories.exercise_statement_repo import insert_many as insert_exercise_statements
 from app.repositories.position_closed_repo import insert_many as insert_position_closed
 from app.repositories.positions_detail_repo import insert_many as insert_positions_detail
 from app.repositories.positions_repo import insert_many as insert_positions
 from app.repositories.validation_result_repo import insert_many as insert_validation_results
+from app.utils.log_utils import setup_logger
+
+logger = setup_logger()
 
 
 def save_parsed_result(conn: sqlite3.Connection, parsed: dict[str, Any]) -> dict[str, int]:
     saved_counts = {
         "account_summary": 0,
+        "deposit_withdrawal": 0,
         "transaction_record": 0,
         "exercise_statement": 0,
         "position_closed": 0,
@@ -23,6 +28,11 @@ def save_parsed_result(conn: sqlite3.Connection, parsed: dict[str, Any]) -> dict
     saved_counts["account_summary"] = insert_account_summary(
         conn,
         parsed.get("account_summary", []),
+    )
+
+    saved_counts["deposit_withdrawal"] = insert_deposit_withdrawal(
+        conn,
+        parsed.get("deposit_withdrawal", []),
     )
 
     saved_counts["transaction_record"] = insert_transaction_records(
@@ -50,7 +60,21 @@ def save_parsed_result(conn: sqlite3.Connection, parsed: dict[str, Any]) -> dict
         parsed.get("positions", []),
     )
 
+    logger.info(
+        "入库完成 account=%s deposit_withdrawal=%s txn=%s exercise=%s closed=%s pos_detail=%s pos=%s",
+        saved_counts["account_summary"],
+        saved_counts["deposit_withdrawal"],
+        saved_counts["transaction_record"],
+        saved_counts["exercise_statement"],
+        saved_counts["position_closed"],
+        saved_counts["positions_detail"],
+        saved_counts["positions"],
+    )
+
     return saved_counts
 
+
 def save_validation_results(conn: sqlite3.Connection, results) -> int:
-    return insert_validation_results(conn, results)
+    count = insert_validation_results(conn, results)
+    logger.info("核验结果入库完成 count=%s", count)
+    return count

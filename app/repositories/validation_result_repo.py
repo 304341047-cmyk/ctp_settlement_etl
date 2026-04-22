@@ -14,31 +14,32 @@ def insert_many(
 
     sql = """
     INSERT INTO validation_result (
-        source_file,
-        rule_code,
-        rule_name,
+        check_name,
         status,
         actual_value,
         expected_value,
         diff_value,
-        message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        tolerance,
+        details,
+        source_file,
+        created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
-    params = []
-    for r in records:
-        params.append(
-            (
-                r.source_file,
-                r.rule_code,
-                r.rule_name,
-                r.status,
-                r.actual_value,
-                r.expected_value,
-                r.diff_value,
-                r.message,
-            )
+    params = [
+        (
+            r.check_name,
+            r.status,
+            r.actual_value,
+            r.expected_value,
+            r.diff_value,
+            r.tolerance,
+            r.details,
+            r.source_file,
+            r.created_at,
         )
+        for r in records
+    ]
 
     conn.executemany(sql, params)
     return len(records)

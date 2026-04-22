@@ -1,294 +1,208 @@
-# CTP Settlement ETL & Daily Report
+# CTP Settlement ETL
+
+基于 CTP 期货/期权交易结算单的 ETL 工具，用于批量解析结算单文本、标准化字段、写入 SQLite，并自动生成核验结果与日报。
 
 ## 项目简介
 
-本项目用于解析 **CTP 结算单（txt）**，并完成：
+这个项目面向日常结算单处理场景，目标是把原始文本结算单转成可查询、可校验、可追溯的数据资产，减少手工整理和重复核对的工作量。
 
-* 结算单结构化解析
-* 多表入库（SQLite）
-* 数据核验（勾稽规则）
-* 日报生成（CSV + Markdown）
+核心能力包括：
 
-目标是将“账单文本”转化为“可分析的数据与报告”。
+- 批量解析 CTP 结算单文本
+- 标准化不同区块和字段格式
+- 写入 SQLite 数据库
+- 自动执行数据一致性核验
+- 生成 Markdown / CSV 日报
+- 基于文件 MD5 防止重复入库
 
----
+## 功能特性
 
-## 当前功能
+### 1. 结算单解析
 
-### 1. 结算单解析入库
+当前支持解析的主要区块：
 
-支持解析以下区块（与账单英文名称一致）：
+- 资金状况
+- 出入金明细
+- 成交记录
+- 行权明细
+- 平仓明细
+- 持仓明细
+- 持仓汇总
 
-* Account Summary（资金状况）
-* Transaction Record（成交记录）
-* Exercise Statement（行权明细）
-* Position Closed（平仓明细）
-* Positions Detail（持仓明细）
-* Positions（持仓汇总）
+已适配部分新版结算单字段：
 
-所有字段尽量完整入库，并保留：
+- `Premium Received/Paid`
+- `Pos. Open Price / Trans. Price`
+- `Settlement Price`
+- `Market Value(Options)`
+- `Long Pos. / Short Pos.`
 
-* `source_file`（来源文件）
-* 原始 payload（用于排查）
+### 2. 数据入库
 
----
+解析结果会写入 SQLite，当前包含以下核心表：
 
-### 2. 数据库存储（SQLite）
+- `account_summary`
+- `deposit_withdrawal`
+- `transaction_record`
+- `exercise_statement`
+- `position_closed`
+- `positions_detail`
+- `positions`
+- `validation_result`
+- `source_file_record`
 
-默认数据库：
+其中 `source_file_record` 用于记录源文件与 MD5，避免重复处理。
 
-```
-data/settlement.db
-```
+### 3. 数据核验
 
-主要表：
+当前已实现的核验项包括：
 
-* account_summary
-* transaction_record
-* exercise_statement
-* position_closed
-* positions_detail
-* positions
-* validation_result
-* source_file
+- 客户权益勾稽
+- 市值权益勾稽
+- 风险度校验
+- 出入金一致性检查
+- 手续费检查
+- 持仓市值检查
 
----
+核验规则说明：
 
-### 3. 去重机制
+- 无相关区块时自动跳过，不记为告警
+- 字段缺失记为 `WARN`
+- 数值异常记为 `FAIL`
 
-基于文件 MD5：
+### 4. 日报生成
 
-* 已处理文件不会重复入库
-* 文件处理状态记录在 `source_file` 表
+处理完成后会自动生成日报，支持：
 
----
+- Markdown 报表
+- CSV 导出
 
-### 4. 数据核验（Validation）
+日报内容包括：
 
-包含基础勾稽规则，例如：
+- 总览
+- 盈亏归因
+- 期权市值
+- 交易概览
+- 持仓概览
+- 行权概览
+- 核验结果
 
-* 平仓盈亏 vs account_summary.realized_p_l
-* 持仓盯市盈亏 vs mtm_p_l
-* 保证金占用 vs margin_occupied
-* 多头/空头市值 vs account_summary
+### 5. 防重复处理
 
-核验结果写入：
+系统基于文件内容 MD5 做去重：
 
-```
-validation_result
-```
+- 自动识别重复文件
+- 已处理文件不会重复入库
+- 重复文件仍会归档保存
 
-并在日志中输出：
+## 快速开始
 
-```
-核验结果: total=11, pass=11, warn=0, fail=0
-```
+### 环境要求
 
----
+- Python 3.10+
+- SQLite（Python 内置 `sqlite3` 即可）
 
-### 5. 日报生成（核心功能）
+### 安装
 
-日报基于 SQL 生成：
+项目当前没有额外第三方依赖，克隆后即可直接运行。
 
-```
-app/sql/report_daily_summary_v2.sql
-```
-
-输出：
-
-```
-output/
-├─ daily_report.csv
-├─ daily_report_YYYY-MM-DD.md
-```
-
----
-
-## 日报逻辑（核心口径）
-
-### 1. 期货盈亏
-
-```
-futures_pnl = realized_p_l + mtm_p_l
+```bash
+python --version
 ```
 
----
+### 准备输入文件
 
-### 2. 期权相关
+将待处理的结算单文本放入 `input/` 目录，例如：
 
-#### 当日期权市值
-
-```
-option_market_value = market_value_long - market_value_short
-```
-
-#### 权利金变动
-
-```
-premium_change = premium_received - premium_paid
-```
-
-#### 上日期权市值
-
-* 使用窗口函数 LAG
-* 首日默认 = 0
-
-#### 期权市值变动
-
-```
-option_market_value_change = option_market_value - prev_option_market_value
-```
-
-#### 期权盈亏
-
-```
-option_pnl = premium_change + option_market_value_change
-```
-
----
-
-### 3. 当日总盈亏
-
-```
-total_pnl = futures_pnl + option_pnl
-```
-
----
-
-### 4. 客户权益勾稽
-
-（使用结存作为上日权益近似）
-
-```
-balance_b_f
-+ deposit_withdrawal
-- total_fee
-+ premium_change
-+ futures_pnl
-= client_equity
-```
-
----
-
-### 5. 市值权益勾稽
-
-```
-client_equity
-+ option_market_value_change
-= market_value_equity
-```
-
----
-
-## 日志设计
-
-分两层：
-
-### 控制台（INFO）
-
-* 文件处理
-* 入库结果
-* 核验结果
-* 日报生成
-
-### 文件日志（DEBUG）
-
-路径：
-
-```
-logs/app.log
-```
-
-包含：
-
-* 区块解析详情
-* 调试信息
-
----
-
-## 项目结构
-
-```
-app/
-├─ main.py
-├─ config.py
-├─ db/
-├─ parsers/
-├─ services/
-├─ reports/
-│  ├─ daily_report_service.py
-│  ├─ markdown_builder.py
-│  └─ sql_loader.py
-├─ sql/
-│  ├─ init_tables.sql
-│  ├─ report_daily_summary.sql
-│  └─ report_daily_summary_v2.sql
-├─ utils/
-```
-
----
-
-## 使用方式
-
-### 1. 放入结算单
-
-```
+```text
 input/
+├─ 结算单_20251020.txt
+└─ 结算单_20251024.txt
 ```
 
----
+### 运行
 
-### 2. 运行
-
-```
+```bash
 python -m app.main
 ```
 
----
+首次运行会自动完成以下动作：
 
-### 3. 输出结果
+- 创建数据目录
+- 初始化 SQLite 表结构
+- 扫描 `input/*.txt`
+- 解析并入库
+- 执行核验
+- 生成日报
 
+## 输出结果
+
+处理结果会落到以下目录：
+
+| 类型 | 位置 |
+| --- | --- |
+| SQLite 数据库 | `data/settlement.db` |
+| 成功归档文件 | `processed_data/archive/` |
+| 失败文件 | `processed_data/error/` |
+| 日报输出 | `processed_data/output/` |
+| 日志 | `logs/` |
+
+## 项目结构
+
+```text
+ctp_settlement_etl/
+├─ app/
+│  ├─ extractors/
+│  ├─ models/
+│  ├─ normalizers/
+│  ├─ parsers/
+│  ├─ reports/
+│  ├─ repositories/
+│  ├─ services/
+│  ├─ sql/
+│  ├─ utils/
+│  ├─ config.py
+│  ├─ db.py
+│  ├─ db_writer.py
+│  └─ main.py
+├─ data/
+│  └─ settlement.db
+├─ input/
+├─ logs/
+├─ processed_data/
+│  ├─ archive/
+│  ├─ error/
+│  └─ output/
+├─ README.md
+└─ requirements.txt
 ```
-archive/      已处理文件
-error/        失败文件
-output/       日报
-logs/         日志
+
+## 处理流程
+
+```text
+结算单文本 -> 读取与解析 -> 字段标准化 -> 写入 SQLite -> 数据核验 -> 生成日报 -> 文件归档
 ```
 
----
+## 设计原则
 
-## 当前进度
+- 字段统一化：避免源账单字段直接污染内部数据模型
+- 宽容解析：尽可能兼容字段增减，不因轻微格式变化直接阻断流程
+- 原始数据保留：保留原始载荷，便于追溯与排查
+- 结果可核验：数据入库后附带一致性校验
+- 防重复处理：同内容文件不会重复入库
 
-已完成：
+## 当前适用场景
 
-* ETL 入库
-* 核验规则
-* 日报（归因版）
-* Markdown 报告（带颜色）
+目前项目已经覆盖以下数据能力：
 
----
+- 单日完整交易数据处理
+- 持仓数据处理
+- 行权数据处理
+- 资金变动处理
+- 手续费统计
 
-## 下一步计划
+如果后续需要扩展更多结算单格式或新增报表维度，可以继续在 `parsers/`、`normalizers/`、`reports/` 下迭代。
 
-1. **按品类分析（重点）**
+## License
 
-   * 生猪 + 生猪期权 → 生猪
-   * 输出品类盈亏贡献
-
-2. 多日收益分析
-
-3. 风险预警（高风险度提示）
-
-4. Excel 报表输出
-
----
-
-## 说明
-
-本项目当前为单账户/多账单场景设计，已具备扩展为：
-
-* 多账户系统
-* 报表系统
-* 风控系统
-
-的基础能力。
+当前仓库内容仅供个人学习与数据分析使用。

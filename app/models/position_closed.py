@@ -19,7 +19,7 @@ class PositionClosed:
     trans_price: Optional[float] = None
     realized_p_l: Optional[float] = None
     premium_received_paid: Optional[float] = None
-    premium_netting: Optional[float] = None
+    account_id: Optional[str] = None
 
     source_file: str = ""
     raw_payload: Optional[str] = None

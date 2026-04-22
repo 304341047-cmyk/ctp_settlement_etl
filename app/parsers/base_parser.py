@@ -17,6 +17,7 @@ class BaseParser(ABC):
     def empty_result(self) -> dict[str, Any]:
         return {
             "account_summary": [],
+            "deposit_withdrawal": [],
             "transaction_record": [],
             "exercise_statement": [],
             "position_closed": [],
