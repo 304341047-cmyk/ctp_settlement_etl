@@ -1,25 +1,37 @@
-WITH latest_account AS (
+WITH latest_date AS (
+    SELECT MAX(date_from) AS date_from
+    FROM account_summary
+),
+
+latest_account AS (
     SELECT
         a.*
     FROM account_summary a
-    WHERE a.date_from = (
-        SELECT MAX(date_from) FROM account_summary
-    )
+    JOIN latest_date ld
+        ON a.date_from = ld.date_from
 ),
 
 prev_account AS (
     SELECT
-        a.*
-    FROM account_summary a
-    WHERE a.date_from = (
-        SELECT MAX(date_from)
-        FROM account_summary
-        WHERE date_from < (SELECT MAX(date_from) FROM account_summary)
-    )
+        pa.*
+    FROM account_summary pa
+    JOIN (
+        SELECT
+            la.account_id,
+            MAX(pa2.date_from) AS prev_date_from
+        FROM latest_account la
+        LEFT JOIN account_summary pa2
+            ON COALESCE(pa2.account_id, '') = COALESCE(la.account_id, '')
+           AND pa2.date_from < la.date_from
+        GROUP BY la.account_id
+    ) p
+        ON COALESCE(pa.account_id, '') = COALESCE(p.account_id, '')
+       AND pa.date_from = p.prev_date_from
 ),
 
 txn AS (
     SELECT
+        account_id,
         source_file,
         date,
         COUNT(*) AS trade_count,
@@ -29,23 +41,24 @@ txn AS (
         COALESCE(SUM(realized_p_l), 0) AS txn_realized_p_l,
         COALESCE(SUM(premium_received_paid), 0) AS premium_change
     FROM transaction_record
-    WHERE date = (SELECT date_from FROM latest_account LIMIT 1)
-    GROUP BY source_file, date
+    WHERE date = (SELECT date_from FROM latest_date)
+    GROUP BY account_id, source_file, date
 ),
 
 pos_detail AS (
     SELECT
+        account_id,
         source_file,
         COUNT(*) AS position_detail_count,
-        COALESCE(SUM(CASE WHEN TRIM(b_s) IN ('买', 'Buy') THEN position_qty ELSE 0 END), 0) AS long_position_qty,
-        COALESCE(SUM(CASE WHEN TRIM(b_s) IN ('卖', 'Sell') THEN position_qty ELSE 0 END), 0) AS short_position_qty
+        COALESCE(SUM(CASE WHEN TRIM(b_s) IN ('买', 'Buy', 'B') THEN position_qty ELSE 0 END), 0) AS long_position_qty,
+        COALESCE(SUM(CASE WHEN TRIM(b_s) IN ('卖', 'Sell', 'S') THEN position_qty ELSE 0 END), 0) AS short_position_qty
     FROM positions_detail
-    WHERE source_file = (SELECT source_file FROM latest_account LIMIT 1)
-    GROUP BY source_file
+    GROUP BY account_id, source_file
 ),
 
 pos AS (
     SELECT
+        account_id,
         source_file,
         COUNT(*) AS position_count,
         COALESCE(SUM(long_pos), 0) AS long_pos_total,
@@ -55,32 +68,35 @@ pos AS (
         COALESCE(SUM(mtm_p_l), 0) AS total_mtm_p_l,
         COALESCE(SUM(margin_occupied), 0) AS total_margin_occupied
     FROM positions
-    WHERE source_file = (SELECT source_file FROM latest_account LIMIT 1)
-    GROUP BY source_file
+    GROUP BY account_id, source_file
 ),
 
 closed AS (
     SELECT
+        account_id,
         source_file,
+        close_date,
         COUNT(*) AS close_count,
         COALESCE(SUM(lots), 0) AS close_lots,
         COALESCE(SUM(realized_p_l), 0) AS close_realized_p_l,
         COALESCE(SUM(premium_received_paid), 0) AS close_premium_change
     FROM position_closed
-    WHERE close_date = (SELECT date_from FROM latest_account LIMIT 1)
-    GROUP BY source_file
+    WHERE close_date = (SELECT date_from FROM latest_date)
+    GROUP BY account_id, source_file, close_date
 ),
 
 exercise AS (
     SELECT
+        account_id,
         source_file,
+        date,
         COUNT(*) AS exercise_count,
         COALESCE(SUM(lots), 0) AS exercise_lots,
         COALESCE(SUM(exercise_p_l), 0) AS exercise_p_l_total,
         COALESCE(SUM(exercise_fee), 0) AS exercise_fee_total
     FROM exercise_statement
-    WHERE date = (SELECT date_from FROM latest_account LIMIT 1)
-    GROUP BY source_file
+    WHERE date = (SELECT date_from FROM latest_date)
+    GROUP BY account_id, source_file, date
 ),
 
 validation AS (
@@ -91,7 +107,6 @@ validation AS (
         COALESCE(SUM(CASE WHEN status = 'WARN' THEN 1 ELSE 0 END), 0) AS validation_warn,
         COALESCE(SUM(CASE WHEN status = 'FAIL' THEN 1 ELSE 0 END), 0) AS validation_fail
     FROM validation_result
-    WHERE source_file = (SELECT source_file FROM latest_account LIMIT 1)
     GROUP BY source_file
 ),
 
@@ -158,17 +173,40 @@ base AS (
 
     FROM latest_account la
     LEFT JOIN prev_account pa
-        ON 1 = 1
+        ON COALESCE(pa.account_id, '') = COALESCE(la.account_id, '')
     LEFT JOIN txn
         ON txn.source_file = la.source_file
+       AND txn.date = la.date_from
+       AND (
+            COALESCE(txn.account_id, '') = COALESCE(la.account_id, '')
+            OR COALESCE(txn.account_id, '') = ''
+       )
     LEFT JOIN pos_detail
         ON pos_detail.source_file = la.source_file
+       AND (
+            COALESCE(pos_detail.account_id, '') = COALESCE(la.account_id, '')
+            OR COALESCE(pos_detail.account_id, '') = ''
+       )
     LEFT JOIN pos
         ON pos.source_file = la.source_file
+       AND (
+            COALESCE(pos.account_id, '') = COALESCE(la.account_id, '')
+            OR COALESCE(pos.account_id, '') = ''
+       )
     LEFT JOIN closed
         ON closed.source_file = la.source_file
+       AND closed.close_date = la.date_from
+       AND (
+            COALESCE(closed.account_id, '') = COALESCE(la.account_id, '')
+            OR COALESCE(closed.account_id, '') = ''
+       )
     LEFT JOIN exercise
         ON exercise.source_file = la.source_file
+       AND exercise.date = la.date_from
+       AND (
+            COALESCE(exercise.account_id, '') = COALESCE(la.account_id, '')
+            OR COALESCE(exercise.account_id, '') = ''
+       )
     LEFT JOIN validation
         ON validation.source_file = la.source_file
 )
@@ -304,4 +342,5 @@ SELECT
     validation_warn,
     validation_fail
 
-FROM base;
+FROM base
+ORDER BY account_id, source_file;

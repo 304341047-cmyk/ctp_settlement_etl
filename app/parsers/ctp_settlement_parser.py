@@ -82,6 +82,10 @@ class CtpSettlementParser:
             result["positions"] = records
             result["warnings"].extend(warnings)
 
+        account_id = self._result_account_id(result)
+        if account_id:
+            self._fill_missing_account_id(result, account_id)
+
         logger.info(
             "解析完成 source_file=%s account=%s deposit_withdrawal=%s txn=%s exercise=%s closed=%s pos_detail=%s pos=%s warnings=%s",
             source_file,
@@ -96,6 +100,25 @@ class CtpSettlementParser:
         )
 
         return result
+
+    def _result_account_id(self, result: dict[str, Any]) -> str | None:
+        account_rows = result.get("account_summary", [])
+        if not account_rows:
+            return None
+        return clean_str(getattr(account_rows[0], "account_id", None))
+
+    def _fill_missing_account_id(self, result: dict[str, Any], account_id: str) -> None:
+        for section_name in [
+            "deposit_withdrawal",
+            "transaction_record",
+            "exercise_statement",
+            "position_closed",
+            "positions_detail",
+            "positions",
+        ]:
+            for row in result.get(section_name, []):
+                if hasattr(row, "account_id") and not getattr(row, "account_id", None):
+                    row.account_id = account_id
 
     # =========================
     # 通用元信息提取

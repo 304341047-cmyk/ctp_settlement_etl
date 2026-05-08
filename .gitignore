@@ -9,6 +9,7 @@ venv/
 
 data/*.db
 logs/*.log
+input/*.txt
 
 processed_data/archive/*
 processed_data/error/*
