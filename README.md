@@ -78,8 +78,8 @@ python --version
 
 ```text
 input/
-├─ 结算单_20260414_XXXXXXXX.txt
-└─ 结算单_20260414_YYYYYYYY.txt
+├─ 结算单_20260101_XXXXXXXX.txt
+└─ 结算单_20260101_YYYYYYYY.txt
 ```
 
 4. 运行 ETL：
@@ -95,8 +95,8 @@ python -m app.main
 同一天多个账户可以一起放入 `input/`。建议文件名带上日期和账户号：
 
 ```text
-结算单_20260414_81183126.txt
-结算单_20260414_88189277.txt
+结算单_20260101_XXXXXXXX.txt
+结算单_20260101_YYYYYYYY.txt
 ```
 
 程序会从结算单头部提取 `AccountID`，并回填到明细记录中。日报 SQL 会按 `account_id` 分账户聚合，避免不同账户之间的成交、持仓、上一日市值互相串账。
