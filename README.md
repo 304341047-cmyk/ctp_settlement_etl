@@ -78,8 +78,8 @@ python --version
 
 ```text
 input/
-├─ 结算单_20260414_81183126.txt
-└─ 结算单_20260414_88189277.txt
+├─ 结算单_20260414_XXXXXXXX.txt
+└─ 结算单_20260414_YYYYYYYY.txt
 ```
 
 4. 运行 ETL：
